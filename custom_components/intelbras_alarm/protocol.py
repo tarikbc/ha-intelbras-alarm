@@ -1,4 +1,5 @@
 """Protocol implementation for Intelbras alarm panels using native 0xe7 protocol."""
+
 from __future__ import annotations
 
 import asyncio

@@ -1,4 +1,5 @@
 """Constants for the Intelbras Alarm integration."""
+
 from __future__ import annotations
 
 from typing import Final

@@ -1,0 +1,25 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configuração do Painel de Alarme Intelbras",
+        "description": "Conecte seu painel de alarme AMT Intelbras ao Home Assistant usando o protocolo nativo.\n\nAntes de começar:\n• Certifique-se de que seu painel está conectado à sua rede local\n• Tenha a Senha Remota do seu painel em mãos (encontrada nas configurações do painel)\n• Certifique-se de que nenhum outro dispositivo está conectado ao painel\n\nInformações dos Campos:\n• IP do Painel: O endereço IP local do seu painel de alarme (ex: 192.168.1.100)\n• Senha Remota: 4-6 dígitos hexadecimais das configurações do painel (ex: 1234, 878787) - NÃO é o código do teclado\n• Porta: Porta de comunicação (padrão: 9009)",
+        "data": {
+          "panel_ip": "Endereço IP do Painel (ex: 192.168.1.100)",
+          "password": "Senha Remota (4-6 dígitos)",
+          "port": "Porta de Comunicação"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Falha na Conexão - Não foi possível alcançar o painel de alarme. Verifique: Endereço IP do painel está correto, Painel está ligado e conectado à rede, Nenhum firewall está bloqueando a porta 9009, Painel não está em modo de configuração",
+      "invalid_auth": "Falha na Autenticação - Não foi possível autenticar com o painel. Verifique: Senha Remota está correta (verifique as configurações do painel), Formato da senha são 4-6 dígitos hex (ex: 1234, 878787), Nenhum outro dispositivo está conectado ao painel, Painel não está em modo de edição/configuração",
+      "unknown": "Erro Inesperado - Ocorreu um erro inesperado durante a configuração. Tente novamente ou verifique os logs do Home Assistant.",
+      "panel_ip": "Por favor, insira um endereço IP válido (ex: 192.168.1.100)",
+      "password": "A senha remota deve ter 4-6 dígitos (ex: 1234, 878787)"
+    },
+    "abort": {
+      "already_configured": "Painel Já Configurado - Um painel com este endereço IP já está configurado no Home Assistant."
+    }
+  }
+}

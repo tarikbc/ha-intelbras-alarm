@@ -1,0 +1,25 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configuración del Panel de Alarma Intelbras",
+        "description": "Conecte su panel de alarma AMT Intelbras a Home Assistant usando el protocolo nativo.\n\nAntes de comenzar:\n• Asegúrese de que su panel esté conectado a su red local\n• Tenga lista la Contraseña Remota de su panel (encontrada en la configuración del panel)\n• Asegúrese de que ningún otro dispositivo esté conectado al panel\n\nInformación de Campos:\n• IP del Panel: La dirección IP local de su panel de alarma (ej: 192.168.1.100)\n• Contraseña Remota: 4-6 dígitos hexadecimales de la configuración del panel (ej: 1234, 878787) - NO es el código del teclado\n• Puerto: Puerto de comunicación (predeterminado: 9009)",
+        "data": {
+          "panel_ip": "Dirección IP del Panel (ej: 192.168.1.100)",
+          "password": "Contraseña Remota (4-6 dígitos)",
+          "port": "Puerto de Comunicación"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Error de Conexión - No se puede alcanzar el panel de alarma. Verifique: La dirección IP del panel es correcta, El panel está encendido y conectado a la red, Ningún firewall está bloqueando el puerto 9009, El panel no está en modo de configuración",
+      "invalid_auth": "Error de Autenticación - No se puede autenticar con el panel. Verifique: La Contraseña Remota es correcta (verifique la configuración del panel), El formato de contraseña son 4-6 dígitos hex (ej: 1234, 878787), Ningún otro dispositivo está conectado al panel, El panel no está en modo de edición/configuración",
+      "unknown": "Error Inesperado - Ocurrió un error inesperado durante la configuración. Inténtelo de nuevo o verifique los registros de Home Assistant.",
+      "panel_ip": "Por favor, ingrese una dirección IP válida (ej: 192.168.1.100)",
+      "password": "La contraseña remota debe tener 4-6 dígitos (ej: 1234, 878787)"
+    },
+    "abort": {
+      "already_configured": "Panel Ya Configurado - Un panel con esta dirección IP ya está configurado en Home Assistant."
+    }
+  }
+}

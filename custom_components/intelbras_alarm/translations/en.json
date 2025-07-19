@@ -1,0 +1,25 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Intelbras Alarm Panel Setup",
+        "description": "Connect your Intelbras AMT alarm panel to Home Assistant using the native protocol.\n\nBefore you start:\n• Ensure your panel is connected to your local network\n• Have your panel's Remote Password ready (found in panel settings)\n• Make sure no other devices are currently connected to the panel\n\nField Information:\n• Panel IP: Your alarm panel's local IP address (e.g., 192.168.1.100)\n• Remote Password: 4-6 digits from panel settings (e.g., 1234, 878787) - NOT your keypad code\n• Port: Communication port (default: 9009)",
+        "data": {
+          "panel_ip": "Panel IP Address (e.g., 192.168.1.100)",
+          "password": "Remote Password (4-6 digits)",
+          "port": "Communication Port"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Connection Failed - Cannot reach the alarm panel. Please check: Panel IP address is correct, Panel is powered on and connected to network, No firewall is blocking port 9009, Panel is not in configuration mode",
+      "invalid_auth": "Authentication Failed - Cannot authenticate with the panel. Please verify: Remote Password is correct (check panel settings), Password format is 4-6 digits (e.g., 1234, 878787), No other devices are connected to the panel, Panel is not in edit/configuration mode",
+      "unknown": "Unexpected Error - An unexpected error occurred during setup. Please try again or check the Home Assistant logs for details.",
+      "panel_ip": "Please enter a valid IP address (e.g., 192.168.1.100)",
+      "password": "Remote password must be 4-6 digits (e.g., 1234, 878787)"
+    },
+    "abort": {
+      "already_configured": "Panel Already Configured - A panel with this IP address is already set up in Home Assistant."
+    }
+  }
+}

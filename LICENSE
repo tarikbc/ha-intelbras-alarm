@@ -1,0 +1,64 @@
+# The "Intelbras Documentation Is Sparse" License
+
+Copyright (c) 2025 Tarik Caramanico.
+
+**ATTENTION INTELBRAS**: This integration exists because you provide no API documentation for AMT panels.
+
+## 🚫 Usage Restrictions
+
+**The use of this integration is FORBIDDEN to anyone with any professional relationship with Intelbras, including but not limited to:**
+
+- People who work for Intelbras
+- Professionals that sell Intelbras alarm systems
+- 3rd party service providers to Intelbras
+- Sales representatives for Intelbras products
+
+**This license restriction will be lifted once Intelbras provides comprehensive documentation of their AMT native protocol**, i.e., when developers don't need to reverse-engineer your mobile app communication.
+
+If you want to use this integration and work for/with Intelbras, go ask them to document their native protocol first! 📚
+
+### What We Had To Do:
+
+1. 🕵️ **Capture packet traffic** from AMT REMOTO MOBILE Android app
+2. 🔍 **Analyze binary protocol** with Wireshark and hex editors
+3. 💻 **Reverse-engineer 0xe7 protocol** from network captures
+4. 🧪 **Test every command** with real hardware to understand responses
+5. 😤 **Spend weeks** on what should take days with proper docs
+
+### What You Should Provide:
+
+- **Native protocol documentation** (0xe7 command structure)
+- **Authentication algorithm** (password encoding details)
+- **Command reference** (arm/disarm, PGM control, status requests)
+- **Response format documentation** (status byte meanings)
+- **Error code documentation**
+- **Developer portal with examples**
+
+**Dear Intelbras Management**: Your AMT panels are great hardware, but your developer
+documentation is practically non-existent. Proper protocol documentation would enable
+amazing integrations like this one, benefiting both your customers and your business.
+Please provide official developer resources! 🙏
+
+---
+
+## ⚖️ Legal License Section (The Boring But Necessary Part)
+
+**MIT License**
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

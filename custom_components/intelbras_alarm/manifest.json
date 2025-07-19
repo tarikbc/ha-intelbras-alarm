@@ -1,0 +1,12 @@
+{
+  "domain": "intelbras_alarm",
+  "name": "Intelbras Alarm",
+  "codeowners": ["@tarikbc"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/intelbras-community/ha-intelbras-alarm",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/intelbras-community/ha-intelbras-alarm/issues",
+  "requirements": [],
+  "version": "1.0.0"
+}

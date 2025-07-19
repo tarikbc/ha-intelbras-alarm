@@ -1,0 +1,12 @@
+# Pre-commit configuration for Intelbras Alarm Home Assistant Integration
+# See https://pre-commit.com for more information
+
+repos:
+  # Code formatting with Black
+  - repo: https://github.com/psf/black
+    rev: 24.3.0
+    hooks:
+      - id: black
+        language_version: python3
+        args: ["--diff", "--color", "--line-length=120"]
+        files: ^custom_components/.*\.py$

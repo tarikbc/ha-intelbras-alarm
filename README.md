@@ -1,12 +1,10 @@
 # Intelbras Alarm Home Assistant Integration
 
-<p align="center">
-  <img src="https://brands.home-assistant.io/intelbras_alarm/icon.png" alt="Intelbras Alarm" width="128" height="128">
-</p>
-
 [![GitHub Release][releases-shield]][releases]
 [![GitHub Activity][commits-shield]][commits]
-[![HACS][hacs-shield]][hacs]
+[![Project Maintenance][maintenance-shield]][user_profile]
+
+<img src="https://brands.home-assistant.io/intelbras_alarm/icon.png" alt="PPA Contatto" width="200" align="right">
 
 A custom Home Assistant integration for Intelbras AMT alarm systems using the native 0xe7 protocol.
 

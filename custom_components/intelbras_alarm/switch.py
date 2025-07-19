@@ -25,21 +25,21 @@ async def async_setup_entry(
 ) -> None:
     """Set up Intelbras switches from a config entry."""
     coordinator: IntelbrasAlarmCoordinator = hass.data[DOMAIN][config_entry.entry_id]
-    
+
     entities: list[SwitchEntity] = []
-    
+
     entities.append(IntelbrasConnectionSwitch(coordinator))
-    
+
     available_pgms = []
     if coordinator.data and "status" in coordinator.data:
         pgms = coordinator.data["status"].get("pgms", [])
         available_pgms = [pgm["id"] for pgm in pgms if pgm.get("id") and 1 <= pgm["id"] <= 4]
         _LOGGER.info("Discovered %d PGMs from panel: %s", len(available_pgms), available_pgms)
-    
+
     for pgm_id in available_pgms:
         entities.append(IntelbrasPGMSwitch(coordinator, pgm_id))
         _LOGGER.debug("Added PGM %d switch", pgm_id)
-    
+
     async_add_entities(entities)
 
 
@@ -53,14 +53,14 @@ class IntelbrasPGMSwitch(CoordinatorEntity, SwitchEntity):
         super().__init__(coordinator)
         self.coordinator: IntelbrasAlarmCoordinator = coordinator
         self.pgm_id = pgm_id
-        
+
         device_id = list(coordinator.device_identifiers)[0][1]
         self._attr_unique_id = f"{device_id}_pgm_{pgm_id}"
-        
+
         # Get PGM name from data
         pgm_name = self._get_pgm_name()
         self._attr_name = pgm_name
-        
+
         # Set device info
         self._attr_device_info = coordinator.device_info
 
@@ -75,10 +75,9 @@ class IntelbrasPGMSwitch(CoordinatorEntity, SwitchEntity):
     def is_on(self) -> bool:
         """Return True if PGM is active."""
         # Return False when connection is disabled (can't know real state)
-        if (self.coordinator.data and 
-            self.coordinator.data.get("status", {}).get("connection_disabled", False)):
+        if self.coordinator.data and self.coordinator.data.get("status", {}).get("connection_disabled", False):
             return False
-            
+
         pgm_status = self.coordinator.get_pgm_status(self.pgm_id)
         if not pgm_status:
             return False
@@ -90,18 +89,18 @@ class IntelbrasPGMSwitch(CoordinatorEntity, SwitchEntity):
         pgm_status = self.coordinator.get_pgm_status(self.pgm_id)
         if not pgm_status:
             return {}
-            
+
         return {
             "pgm_id": self.pgm_id,
             "pgm_name": pgm_status.get("name", f"PGM {self.pgm_id}"),
             "note": "PGM outputs are typically pulse/momentary - they may auto-turn off after 3-5 seconds. This is normal alarm panel behavior.",
-            "output_type": "pulse/momentary"
+            "output_type": "pulse/momentary",
         }
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the PGM on with retry logic."""
         _LOGGER.debug("Turning on PGM %s", self.pgm_id)
-        
+
         # Retry logic for more reliable PGM control
         max_retries = 2
         for attempt in range(max_retries + 1):
@@ -110,22 +109,24 @@ class IntelbrasPGMSwitch(CoordinatorEntity, SwitchEntity):
                 if success:
                     _LOGGER.debug("PGM %s turned on successfully", self.pgm_id)
                     return
-                    
+
                 _LOGGER.warning("PGM %s turn on failed (attempt %d/%d)", self.pgm_id, attempt + 1, max_retries + 1)
                 if attempt < max_retries:
                     await asyncio.sleep(1)  # Wait before retry
-                    
+
             except Exception as ex:
-                _LOGGER.warning("PGM %s turn on error (attempt %d/%d): %s", self.pgm_id, attempt + 1, max_retries + 1, ex)
+                _LOGGER.warning(
+                    "PGM %s turn on error (attempt %d/%d): %s", self.pgm_id, attempt + 1, max_retries + 1, ex
+                )
                 if attempt < max_retries:
                     await asyncio.sleep(1)
-                    
+
         _LOGGER.error("Failed to turn on PGM %s after %d attempts", self.pgm_id, max_retries + 1)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the PGM off with retry logic."""
         _LOGGER.debug("Turning off PGM %s", self.pgm_id)
-        
+
         # Retry logic for more reliable PGM control
         max_retries = 2
         for attempt in range(max_retries + 1):
@@ -134,30 +135,28 @@ class IntelbrasPGMSwitch(CoordinatorEntity, SwitchEntity):
                 if success:
                     _LOGGER.debug("PGM %s turned off successfully", self.pgm_id)
                     return
-                    
+
                 _LOGGER.warning("PGM %s turn off failed (attempt %d/%d)", self.pgm_id, attempt + 1, max_retries + 1)
                 if attempt < max_retries:
                     await asyncio.sleep(1)  # Wait before retry
-                    
+
             except Exception as ex:
-                _LOGGER.warning("PGM %s turn off error (attempt %d/%d): %s", self.pgm_id, attempt + 1, max_retries + 1, ex)
+                _LOGGER.warning(
+                    "PGM %s turn off error (attempt %d/%d): %s", self.pgm_id, attempt + 1, max_retries + 1, ex
+                )
                 if attempt < max_retries:
                     await asyncio.sleep(1)
-                    
+
         _LOGGER.error("Failed to turn off PGM %s after %d attempts", self.pgm_id, max_retries + 1)
 
     @property
     def available(self) -> bool:
         """Return True if entity is available."""
         # Entity is unavailable when connection is disabled
-        if (self.coordinator.data and 
-            self.coordinator.data.get("status", {}).get("connection_disabled", False)):
+        if self.coordinator.data and self.coordinator.data.get("status", {}).get("connection_disabled", False):
             return False
-            
-        return (
-            self.coordinator.last_update_success
-            and self.coordinator.data is not None
-        ) 
+
+        return self.coordinator.last_update_success and self.coordinator.data is not None
 
 
 class IntelbrasConnectionSwitch(CoordinatorEntity, SwitchEntity):
@@ -171,7 +170,7 @@ class IntelbrasConnectionSwitch(CoordinatorEntity, SwitchEntity):
         """Initialize the connection control switch."""
         super().__init__(coordinator)
         self.coordinator: IntelbrasAlarmCoordinator = coordinator
-        
+
         device_id = list(coordinator.device_identifiers)[0][1]
         self._attr_unique_id = f"{device_id}_connection_control"
         self._attr_name = "Connection Control"
@@ -179,7 +178,7 @@ class IntelbrasConnectionSwitch(CoordinatorEntity, SwitchEntity):
     @property
     def is_on(self) -> bool:
         """Return True if connection is enabled."""
-        return getattr(self.coordinator, '_connection_enabled', True)
+        return getattr(self.coordinator, "_connection_enabled", True)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -195,10 +194,10 @@ class IntelbrasConnectionSwitch(CoordinatorEntity, SwitchEntity):
         """Enable the alarm connection."""
         _LOGGER.info("Enabling alarm panel connection")
         self.coordinator._connection_enabled = True
-        
+
         # Trigger immediate update when enabled
         await self.coordinator.async_request_refresh()
-        
+
         # Update the switch state
         self.async_write_ha_state()
 
@@ -206,10 +205,10 @@ class IntelbrasConnectionSwitch(CoordinatorEntity, SwitchEntity):
         """Disable the alarm connection."""
         _LOGGER.info("Disabling alarm panel connection")
         self.coordinator._connection_enabled = False
-        
+
         # Trigger immediate update to clear cached data and disconnect
         await self.coordinator.async_request_refresh()
-        
+
         # Update the switch state
         self.async_write_ha_state()
 
@@ -217,4 +216,4 @@ class IntelbrasConnectionSwitch(CoordinatorEntity, SwitchEntity):
     def available(self) -> bool:
         """Return True if entity is available."""
         # Connection switch is always available
-        return True 
+        return True

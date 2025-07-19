@@ -23,7 +23,7 @@ PLATFORMS: list[Platform] = [
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Intelbras Alarm from a config entry."""
     coordinator = IntelbrasAlarmCoordinator(hass, entry)
-    
+
     try:
         await coordinator.async_config_entry_first_refresh()
     except Exception as ex:
@@ -33,7 +33,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    
+
     return True
 
 
@@ -49,4 +49,4 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload config entry."""
     await async_unload_entry(hass, entry)
-    await async_setup_entry(hass, entry) 
+    await async_setup_entry(hass, entry)

@@ -28,7 +28,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up Intelbras alarm control panel from a config entry."""
     coordinator: IntelbrasAlarmCoordinator = hass.data[DOMAIN][config_entry.entry_id]
-    
+
     async_add_entities([IntelbrasAlarmControlPanel(coordinator)])
 
 
@@ -37,10 +37,7 @@ class IntelbrasAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
 
     _attr_has_entity_name = True
     _attr_name = None  # Use device name
-    _attr_supported_features = (
-        AlarmControlPanelEntityFeature.ARM_AWAY
-        | AlarmControlPanelEntityFeature.ARM_HOME
-    )
+    _attr_supported_features = AlarmControlPanelEntityFeature.ARM_AWAY | AlarmControlPanelEntityFeature.ARM_HOME
     # No user code required - authentication handled at connection level
     _attr_code_arm_required = False
     _attr_code_disarm_required = False
@@ -49,11 +46,11 @@ class IntelbrasAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
         """Initialize the alarm control panel."""
         super().__init__(coordinator)
         self.coordinator: IntelbrasAlarmCoordinator = coordinator
-        
+
         # Set unique ID
         device_id = list(coordinator.device_identifiers)[0][1]
         self._attr_unique_id = f"{device_id}_alarm_panel"
-        
+
         # Set device info
         self._attr_device_info = coordinator.device_info
 
@@ -62,14 +59,13 @@ class IntelbrasAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
         """Return the state of the alarm control panel."""
         if not self.coordinator.last_update_success:
             return None
-            
+
         # Check if connection is disabled
-        if (self.coordinator.data and 
-            self.coordinator.data.get("status", {}).get("connection_disabled", False)):
+        if self.coordinator.data and self.coordinator.data.get("status", {}).get("connection_disabled", False):
             return None
-            
+
         alarm_status = self.coordinator.get_alarm_status()
-        
+
         # Handle None values when disconnected
         if alarm_status["alarm"] is True:
             return AlarmControlPanelState.TRIGGERED
@@ -87,29 +83,29 @@ class IntelbrasAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
         """Return the state attributes."""
         if not self.coordinator.data:
             return {}
-            
+
         status = self.coordinator.data.get("status", {})
-        
+
         attributes = {
             "armed": status.get("armed", False),
             "partial_armed": status.get("partial_armed", False),
             "alarm": status.get("alarm", False),
             "panel_info": self.coordinator.panel_info,
         }
-        
+
         # Add zone information
         zones = status.get("zones", [])
         active_zones = [zone["name"] for zone in zones if zone.get("active")]
         bypassed_zones = [zone["name"] for zone in zones if zone.get("bypassed")]
         alarm_zones = [zone["name"] for zone in zones if zone.get("alarm")]
-        
+
         if active_zones:
             attributes["active_zones"] = active_zones
         if bypassed_zones:
             attributes["bypassed_zones"] = bypassed_zones
         if alarm_zones:
             attributes["alarm_zones"] = alarm_zones
-            
+
         # Add recent events
         events = self.coordinator.get_events(3)
         if events:
@@ -121,7 +117,7 @@ class IntelbrasAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
                 }
                 for event in events
             ]
-        
+
         return attributes
 
     async def async_alarm_disarm(self, code: str | None = None) -> None:
@@ -149,11 +145,7 @@ class IntelbrasAlarmControlPanel(CoordinatorEntity, AlarmControlPanelEntity):
     def available(self) -> bool:
         """Return True if entity is available."""
         # Entity is unavailable when connection is disabled
-        if (self.coordinator.data and 
-            self.coordinator.data.get("status", {}).get("connection_disabled", False)):
+        if self.coordinator.data and self.coordinator.data.get("status", {}).get("connection_disabled", False):
             return False
-            
-        return (
-            self.coordinator.last_update_success
-            and self.coordinator.data is not None
-        ) 
+
+        return self.coordinator.last_update_success and self.coordinator.data is not None

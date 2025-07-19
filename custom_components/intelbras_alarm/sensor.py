@@ -29,19 +29,21 @@ async def async_setup_entry(
 ) -> None:
     """Set up Intelbras sensors from a config entry."""
     coordinator: IntelbrasAlarmCoordinator = hass.data[DOMAIN][config_entry.entry_id]
-    
+
     entities: list[SensorEntity] = []
-    
+
     # Add system diagnostic sensors
-    entities.extend([
-        IntelbrasLastUpdateSensor(coordinator),
-        IntelbrasSystemStatusSensor(coordinator),
-        IntelbrasSourceVoltageSensor(coordinator),
-        IntelbrasBatteryVoltageSensor(coordinator),
-        IntelbrasSirenStatusSensor(coordinator),
-        IntelbrasBatteryStatusSensor(coordinator),
-    ])
-    
+    entities.extend(
+        [
+            IntelbrasLastUpdateSensor(coordinator),
+            IntelbrasSystemStatusSensor(coordinator),
+            IntelbrasSourceVoltageSensor(coordinator),
+            IntelbrasBatteryVoltageSensor(coordinator),
+            IntelbrasSirenStatusSensor(coordinator),
+            IntelbrasBatteryStatusSensor(coordinator),
+        ]
+    )
+
     async_add_entities(entities)
 
 
@@ -60,14 +62,10 @@ class IntelbrasBaseSensor(CoordinatorEntity, SensorEntity):
     def available(self) -> bool:
         """Return True if entity is available."""
         # Entity is unavailable when connection is disabled
-        if (self.coordinator.data and 
-            self.coordinator.data.get("status", {}).get("connection_disabled", False)):
+        if self.coordinator.data and self.coordinator.data.get("status", {}).get("connection_disabled", False):
             return False
-            
-        return (
-            self.coordinator.last_update_success
-            and self.coordinator.data is not None
-        )
+
+        return self.coordinator.last_update_success and self.coordinator.data is not None
 
 
 class IntelbrasLastUpdateSensor(IntelbrasBaseSensor):
@@ -78,17 +76,17 @@ class IntelbrasLastUpdateSensor(IntelbrasBaseSensor):
     _attr_entity_registry_enabled_default = False  # Disabled by default
     _attr_has_entity_name = True
     _attr_name = "Last Update"
-    
+
     _attr_should_poll = False
     _attr_available = True
 
     def __init__(self, coordinator: IntelbrasAlarmCoordinator) -> None:
         """Initialize the last update sensor."""
         super().__init__(coordinator)
-        
+
         device_id = list(coordinator.device_identifiers)[0][1]
         self._attr_unique_id = f"{device_id}_last_update"
-        
+
     @property
     def native_value(self) -> datetime | None:
         """Return the last successful update timestamp."""
@@ -111,7 +109,7 @@ class IntelbrasSystemStatusSensor(IntelbrasBaseSensor):
     def __init__(self, coordinator: IntelbrasAlarmCoordinator) -> None:
         """Initialize the system status sensor."""
         super().__init__(coordinator)
-        
+
         device_id = list(coordinator.device_identifiers)[0][1]
         self._attr_unique_id = f"{device_id}_system_status"
         self._attr_name = "System Status"
@@ -121,9 +119,9 @@ class IntelbrasSystemStatusSensor(IntelbrasBaseSensor):
         """Return the native value of the sensor."""
         if not self.coordinator.data or "status" not in self.coordinator.data:
             return "unknown"
-            
+
         status = self.coordinator.data["status"]
-        
+
         if status.get("alarm", False):
             return "Alarm"
         elif status.get("armed", False):
@@ -138,15 +136,16 @@ class IntelbrasSystemStatusSensor(IntelbrasBaseSensor):
         """Return the state attributes."""
         if not self.coordinator.data or "status" not in self.coordinator.data:
             return {}
-            
+
         status = self.coordinator.data["status"]
-        
+
         return {
             "armed": status.get("armed", False),
             "partial_armed": status.get("partial_armed", False),
             "alarm": status.get("alarm", False),
             "pgms_count": len(status.get("pgms", [])),
         }
+
 
 class IntelbrasSourceVoltageSensor(IntelbrasBaseSensor):
     """Sensor for panel source voltage."""
@@ -160,7 +159,7 @@ class IntelbrasSourceVoltageSensor(IntelbrasBaseSensor):
     def __init__(self, coordinator: IntelbrasAlarmCoordinator) -> None:
         """Initialize the source voltage sensor."""
         super().__init__(coordinator)
-        
+
         device_id = list(coordinator.device_identifiers)[0][1]
         self._attr_unique_id = f"{device_id}_source_voltage"
         self._attr_name = "Source Voltage"
@@ -170,10 +169,10 @@ class IntelbrasSourceVoltageSensor(IntelbrasBaseSensor):
         """Return the source voltage."""
         if not self.coordinator.data or "status" not in self.coordinator.data:
             return None
-            
+
         status = self.coordinator.data["status"]
         voltage = status.get("source_voltage")
-        
+
         return voltage if voltage is not None else None
 
     @property
@@ -181,7 +180,7 @@ class IntelbrasSourceVoltageSensor(IntelbrasBaseSensor):
         """Return the state attributes."""
         if not self.coordinator.data or "status" not in self.coordinator.data:
             return {}
-            
+
         return {
             "last_updated": self.coordinator.last_successful_update_time,
             "panel_info": self.coordinator.panel_info,
@@ -196,7 +195,7 @@ class IntelbrasSirenStatusSensor(IntelbrasBaseSensor):
     def __init__(self, coordinator: IntelbrasAlarmCoordinator) -> None:
         """Initialize the siren status sensor."""
         super().__init__(coordinator)
-        
+
         device_id = list(coordinator.device_identifiers)[0][1]
         self._attr_unique_id = f"{device_id}_siren_status"
         self._attr_name = "Siren Status"
@@ -207,16 +206,16 @@ class IntelbrasSirenStatusSensor(IntelbrasBaseSensor):
         if not self.coordinator.data or "status" not in self.coordinator.data:
             _LOGGER.debug("Siren status: No data available")
             return "Unknown"
-            
+
         status = self.coordinator.data["status"]
         siren_status = status.get("siren_status")
-        
+
         # Additional debugging info from raw parsing
         if "siren_byte_debug" in status:
             _LOGGER.debug("Siren debug byte: 0x%02x", status["siren_byte_debug"])
         if "siren_reason" in status:
             _LOGGER.debug("Siren interpretation reason: %s", status["siren_reason"])
-        
+
         return siren_status if siren_status is not None else "Unknown"
 
     @property
@@ -224,7 +223,7 @@ class IntelbrasSirenStatusSensor(IntelbrasBaseSensor):
         """Return the state attributes."""
         if not self.coordinator.data or "status" not in self.coordinator.data:
             return {}
-            
+
         return {
             "last_updated": self.coordinator.last_successful_update_time,
             "panel_info": self.coordinator.panel_info,
@@ -239,7 +238,7 @@ class IntelbrasBatteryStatusSensor(IntelbrasBaseSensor):
     def __init__(self, coordinator: IntelbrasAlarmCoordinator) -> None:
         """Initialize the battery status sensor."""
         super().__init__(coordinator)
-        
+
         device_id = list(coordinator.device_identifiers)[0][1]
         self._attr_unique_id = f"{device_id}_battery_status"
         self._attr_name = "Battery Status"
@@ -249,10 +248,10 @@ class IntelbrasBatteryStatusSensor(IntelbrasBaseSensor):
         """Return the battery status."""
         if not self.coordinator.data or "status" not in self.coordinator.data:
             return "Unknown"
-            
+
         status = self.coordinator.data["status"]
         battery_missing = status.get("battery_missing")
-        
+
         if battery_missing is None:
             return "Unknown"
         elif battery_missing:
@@ -265,11 +264,11 @@ class IntelbrasBatteryStatusSensor(IntelbrasBaseSensor):
         """Return the state attributes."""
         if not self.coordinator.data or "status" not in self.coordinator.data:
             return {}
-            
+
         return {
             "last_updated": self.coordinator.last_successful_update_time,
             "panel_info": self.coordinator.panel_info,
-        } 
+        }
 
 
 class IntelbrasBatteryVoltageSensor(IntelbrasBaseSensor):
@@ -284,7 +283,7 @@ class IntelbrasBatteryVoltageSensor(IntelbrasBaseSensor):
     def __init__(self, coordinator: IntelbrasAlarmCoordinator) -> None:
         """Initialize the battery voltage sensor."""
         super().__init__(coordinator)
-        
+
         device_id = list(coordinator.device_identifiers)[0][1]
         self._attr_unique_id = f"{device_id}_battery_voltage"
         self._attr_name = "Battery Voltage"
@@ -294,10 +293,10 @@ class IntelbrasBatteryVoltageSensor(IntelbrasBaseSensor):
         """Return the battery voltage."""
         if not self.coordinator.data or "status" not in self.coordinator.data:
             return None
-            
+
         status = self.coordinator.data["status"]
         battery_voltage = status.get("battery_voltage")
-        
+
         return battery_voltage if battery_voltage is not None else None
 
     @property
@@ -305,8 +304,8 @@ class IntelbrasBatteryVoltageSensor(IntelbrasBaseSensor):
         """Return the state attributes."""
         if not self.coordinator.data or "status" not in self.coordinator.data:
             return {}
-            
+
         return {
             "last_updated": self.coordinator.last_successful_update_time,
             "panel_info": self.coordinator.panel_info,
-        } 
+        }

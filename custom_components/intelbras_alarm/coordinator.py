@@ -27,6 +27,7 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+
 class IntelbrasAlarmCoordinator(DataUpdateCoordinator):
     """Coordinator for Intelbras Alarm."""
 
@@ -34,22 +35,22 @@ class IntelbrasAlarmCoordinator(DataUpdateCoordinator):
         """Initialize the coordinator."""
         self.hass = hass
         self.entry = entry
-        self.connector = None # This will be initialized in the future
-        
+        self.connector = None  # This will be initialized in the future
+
         # Extract connection info for device registry
         self.panel_ip = entry.data.get(CONF_PANEL_IP, "Unknown")
         self.password = entry.data.get(CONF_PASSWORD, "")
-        
+
         # Determine device model and identifiers
         self.device_model = self._determine_device_model()
         self.device_identifiers = self._get_device_identifiers()
-        
+
         # Timestamp tracking
         self._last_successful_update: datetime | None = None
-        
+
         # Connection control - enabled by default
         self._connection_enabled = True
-        
+
         super().__init__(
             hass,
             _LOGGER,
@@ -61,7 +62,7 @@ class IntelbrasAlarmCoordinator(DataUpdateCoordinator):
         """Determine the device model based on available information."""
         # For now, default to AMT series since that's what we support
         return f"{MODEL_PREFIX} Panel"
-    
+
     def _get_device_identifiers(self) -> set[tuple[str, str]]:
         """Get device identifiers for device registry."""
         # Use IP address as identifier for local connections
@@ -76,7 +77,7 @@ class IntelbrasAlarmCoordinator(DataUpdateCoordinator):
             status = self.data["status"]
             if status.get("firmware_version"):
                 firmware_version = status["firmware_version"]
-        
+
         return {
             "identifiers": self.device_identifiers,
             "name": f"Intelbras {self.device_model}",
@@ -99,7 +100,7 @@ class IntelbrasAlarmCoordinator(DataUpdateCoordinator):
         # Check if connection is enabled via the connection control switch
         if not self._connection_enabled:
             _LOGGER.debug("Connection disabled via switch - disconnecting and clearing data")
-            
+
             # Disconnect and cleanup connector when disabled
             if self.connector:
                 try:
@@ -108,10 +109,10 @@ class IntelbrasAlarmCoordinator(DataUpdateCoordinator):
                     _LOGGER.debug("Error during disconnect: %s", ex)
                 finally:
                     self.connector = None
-            
+
             # Clear last successful update timestamp so entities show as unavailable
             self._last_successful_update = None
-            
+
             # Return disconnected status with no cached data
             return {
                 "status": {
@@ -132,24 +133,25 @@ class IntelbrasAlarmCoordinator(DataUpdateCoordinator):
                 "panel_info": self.panel_info,
                 "last_update": time.time(),
             }
-        
+
         try:
             if not self.connector:
                 from .protocol import IntelbrasConnector
+
                 self.connector = IntelbrasConnector(self.entry.data)
 
             # Get current status
             status = await self.connector.async_get_status()
-            
+
             # Update timestamp on successful data retrieval
             self._last_successful_update = dt_util.now()
-            
+
             return {
                 "status": status,
                 "panel_info": self.panel_info,
                 "last_update": time.time(),
             }
-            
+
         except Exception as err:
             _LOGGER.error("Error communicating with alarm panel: %s", err)
             raise UpdateFailed(f"Error communicating with alarm panel: {err}")
@@ -158,24 +160,25 @@ class IntelbrasAlarmCoordinator(DataUpdateCoordinator):
     async def async_arm(self, mode: str = "away") -> bool:
         """Arm the alarm system with retry logic for connection resilience."""
         max_retries = 2
-        
+
         for attempt in range(max_retries + 1):
             try:
                 if not self.connector:
                     from .protocol import IntelbrasConnector
+
                     self.connector = IntelbrasConnector(self.entry.data)
 
                 _LOGGER.info("Sending ARM command (attempt %d/%d)", attempt + 1, max_retries + 1)
                 success = await self.connector.async_arm()
-                
+
                 if success:
                     # Refresh data to get updated status
                     await asyncio.sleep(0.5)  # Brief delay for panel to process
                     await self.async_request_refresh()
-                    
+
                 _LOGGER.info("ARM command result: %s", "SUCCESS" if success else "FAILED")
                 return success
-                
+
             except Exception as err:
                 _LOGGER.warning("Error arming panel (attempt %d/%d): %s", attempt + 1, max_retries + 1, err)
                 if attempt < max_retries:
@@ -184,30 +187,31 @@ class IntelbrasAlarmCoordinator(DataUpdateCoordinator):
                 else:
                     _LOGGER.error("All arm attempts failed")
                     return False
-        
+
         return False
 
     async def async_disarm(self) -> bool:
         """Disarm the alarm system with retry logic for connection resilience."""
         max_retries = 2
-        
+
         for attempt in range(max_retries + 1):
             try:
                 if not self.connector:
                     from .protocol import IntelbrasConnector
+
                     self.connector = IntelbrasConnector(self.entry.data)
 
                 _LOGGER.info("Sending DISARM command (attempt %d/%d)", attempt + 1, max_retries + 1)
                 success = await self.connector.async_disarm()
-                
+
                 if success:
                     # Refresh data to get updated status
                     await asyncio.sleep(0.5)  # Brief delay for panel to process
                     await self.async_request_refresh()
-                    
+
                 _LOGGER.info("DISARM command result: %s", "SUCCESS" if success else "FAILED")
                 return success
-                
+
             except Exception as err:
                 _LOGGER.warning("Error disarming panel (attempt %d/%d): %s", attempt + 1, max_retries + 1, err)
                 if attempt < max_retries:
@@ -216,7 +220,7 @@ class IntelbrasAlarmCoordinator(DataUpdateCoordinator):
                 else:
                     _LOGGER.error("All disarm attempts failed")
                     return False
-        
+
         return False
 
     async def async_trigger_pgm(self, pgm_id: int) -> bool:
@@ -224,19 +228,20 @@ class IntelbrasAlarmCoordinator(DataUpdateCoordinator):
         try:
             if not self.connector:
                 from .protocol import IntelbrasConnector
+
                 self.connector = IntelbrasConnector(self.entry.data)
 
             _LOGGER.info("Triggering PGM %s", pgm_id)
             success = await self.connector.async_set_pgm(pgm_id, True)  # State doesn't matter for toggle
-            
+
             if success:
                 # Refresh data to get updated status
                 await asyncio.sleep(0.5)  # Brief delay for panel to process
                 await self.async_request_refresh()
-                
+
             _LOGGER.info("PGM %s trigger result: %s", pgm_id, "SUCCESS" if success else "FAILED")
             return success
-            
+
         except Exception as ex:
             _LOGGER.error("Failed to trigger PGM %s: %s", pgm_id, ex)
             return False
@@ -244,54 +249,56 @@ class IntelbrasAlarmCoordinator(DataUpdateCoordinator):
     async def async_set_pgm(self, pgm_id: int, state: bool) -> bool:
         """Set PGM output with retry logic for connection resilience."""
         max_retries = 2
-        
+
         for attempt in range(max_retries + 1):
             try:
                 if not self.connector:
                     from .protocol import IntelbrasConnector
+
                     self.connector = IntelbrasConnector(self.entry.data)
 
                 action = "enable" if state else "disable"
                 _LOGGER.info("Setting PGM %s to %s (attempt %d/%d)", pgm_id, action, attempt + 1, max_retries + 1)
-                
+
                 # Send PGM command - protocol layer handles state tracking
                 success = await self.connector.async_set_pgm(pgm_id, state)
-                
+
                 if success:
                     # Refresh data to update UI with new state
                     await asyncio.sleep(0.3)  # Brief delay for panel to process
                     await self.async_request_refresh()
-                    
+
                     _LOGGER.info("PGM %s %s result: SUCCESS", pgm_id, action)
                     return True
                 else:
                     _LOGGER.warning("PGM %s %s result: FAILED", pgm_id, action)
-                    
+
             except Exception as ex:
                 action = "enable" if state else "disable"
-                _LOGGER.warning("Failed to %s PGM %s (attempt %d/%d): %s", action, pgm_id, attempt + 1, max_retries + 1, ex)
+                _LOGGER.warning(
+                    "Failed to %s PGM %s (attempt %d/%d): %s", action, pgm_id, attempt + 1, max_retries + 1, ex
+                )
                 if attempt < max_retries:
                     _LOGGER.info("Retrying PGM %s command in 1 second...", pgm_id)
                     await asyncio.sleep(1)
                 else:
                     _LOGGER.error("All PGM %s attempts failed", pgm_id)
                     return False
-        
-        return False
 
+        return False
 
     def get_pgm_status(self, pgm_id: int) -> dict[str, Any] | None:
         """Get status of a specific PGM."""
         if not self.connector:
             return None
-            
+
         return self.connector.get_pgm_status(pgm_id)
 
     def get_alarm_status(self) -> dict[str, Any]:
         """Get alarm status in format expected by alarm_control_panel."""
         if not self.connector:
             return {"armed": False, "partial_armed": False, "alarm": False}
-            
+
         return self.connector.get_alarm_status()
 
     def get_connection_info(self) -> dict[str, Any]:
@@ -303,14 +310,16 @@ class IntelbrasAlarmCoordinator(DataUpdateCoordinator):
                 "last_update_success": self.last_update_success,
                 "data_available": self.data is not None,
             }
-        
+
         info = self.connector.get_connection_info()
-        info.update({
-            "coordinator_initialized": True,
-            "last_update_success": self.last_update_success,
-            "data_available": self.data is not None,
-        })
-        
+        info.update(
+            {
+                "coordinator_initialized": True,
+                "last_update_success": self.last_update_success,
+                "data_available": self.data is not None,
+            }
+        )
+
         return info
 
     @property
@@ -324,7 +333,7 @@ class IntelbrasAlarmCoordinator(DataUpdateCoordinator):
         return await self.async_arm("away")
 
     async def async_arm_home(self) -> bool:
-        """Legacy method - arm in home mode."""  
+        """Legacy method - arm in home mode."""
         return await self.async_arm("home")  # For now, same as away
 
     async def async_arm_night(self) -> bool:
@@ -343,12 +352,12 @@ class IntelbrasAlarmCoordinator(DataUpdateCoordinator):
         """Disconnect from the panel."""
         if self.connector:
             await self.connector.async_disconnect()
-            self.connector = None 
+            self.connector = None
 
     def get_events(self, limit: int = 10) -> list[dict[str, Any]]:
         """Get recent events."""
         if not self.data or "status" not in self.data:
             return []
-            
+
         events = self.data["status"].get("events", [])
         return events[:limit]

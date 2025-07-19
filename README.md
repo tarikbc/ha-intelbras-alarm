@@ -10,13 +10,6 @@ A custom Home Assistant integration for Intelbras AMT alarm systems using the na
 
 > **✅ Installation Note**: This integration can be installed through HACS (Home Assistant Community Store) or manually. It provides direct communication with your alarm panel using the same protocol as the official Android app.
 
-[releases-shield]: https://img.shields.io/github/release/intelbras-community/ha-intelbras-alarm.svg
-[releases]: https://github.com/intelbras-community/ha-intelbras-alarm/releases
-[commits-shield]: https://img.shields.io/github/commit-activity/y/intelbras-community/ha-intelbras-alarm.svg
-[commits]: https://github.com/intelbras-community/ha-intelbras-alarm/commits/main
-[hacs-shield]: https://img.shields.io/badge/HACS-Custom-orange.svg
-[hacs]: https://github.com/custom-components/hacs
-
 ## Features
 
 - **Direct Control**: Arm/disarm your alarm system with immediate status updates
@@ -119,3 +112,11 @@ Additional sensors provide detailed monitoring information:
 - **System Status**: Overall alarm system state (`sensor.panel_system_status`)
 - **Active Zones**: Count of active zones (`sensor.panel_active_zones`)
 - **Last Update**: Timestamp of most recent status update (`sensor.panel_last_update`)
+
+
+[commits-shield]: https://img.shields.io/github/commit-activity/y/tarikbc/ha-ppa-contatto.svg?style=for-the-badge
+[commits]: https://github.com/tarikbc/ha-ppa-contatto/commits/main
+[maintenance-shield]: https://img.shields.io/badge/maintainer-Tarik%20Caramanico%20%40tarikbc-blue.svg?style=for-the-badge
+[releases-shield]: https://img.shields.io/github/release/tarikbc/ha-ppa-contatto.svg?style=for-the-badge
+[releases]: https://github.com/tarikbc/ha-ppa-contatto/releases
+[user_profile]: https://github.com/tarikbc

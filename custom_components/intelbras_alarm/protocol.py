@@ -176,6 +176,7 @@ class IntelbrasNativeProtocol:
         """
         result = {
             "armed": False,
+            "authenticated": False,  # Default to False to avoid KeyError on malformed/short responses
             "raw_response": data.hex(),
             "response_length": len(data),
             "firmware_version": None,
@@ -501,8 +502,8 @@ class IntelbrasConnector:
 
                     status = {
                         "connected": True,
-                        "authenticated": parsed["authenticated"],
-                        "armed": parsed["armed"],
+                        "authenticated": parsed.get("authenticated", False),
+                        "armed": parsed.get("armed", False),
                         "partial_armed": False,
                         "alarm": False,
                         "pgms": self._build_pgm_status(),
@@ -534,17 +535,20 @@ class IntelbrasConnector:
         ]
 
     def _get_disconnected_status(self, reason: str) -> dict[str, Any]:
-        """Return disconnected status."""
+        """Return disconnected status while preserving last known alarm state."""
         _LOGGER.warning("Panel disconnected: %s", reason)
+
+        # Preserve last known alarm states when available
+        previous = self.last_status or {}
 
         status = {
             "connected": False,
             "authenticated": False,
-            "armed": False,
-            "partial_armed": False,
-            "alarm": False,
+            "armed": previous.get("armed", None),
+            "partial_armed": previous.get("partial_armed", None),
+            "alarm": previous.get("alarm", None),
             "pgms": self._build_pgm_status(),  # Use same 2-PGM logic
-            "events": [],
+            "events": previous.get("events", []),
             "connection_error": reason,
         }
 

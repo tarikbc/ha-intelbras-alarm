@@ -7,44 +7,84 @@ import logging
 import socket
 from typing import Any
 
-from .const import (
-    CONF_PANEL_IP,
-    CONF_PASSWORD,
-    CONF_PORT,
-    DEFAULT_PORT,
-    DEFAULT_TIMEOUT,
-    # Native protocol constants
-    NATIVE_PROTOCOL_ID,
-    NATIVE_AUTH_REQUEST,
-    NATIVE_AUTH_SUBTYPE,
-    NATIVE_AUTH_CMD,
-    NATIVE_AUTH_CONSTANTS,
-    NATIVE_STATUS_REQUEST,
-    NATIVE_SUBTYPE_STATUS,
-    NATIVE_CMD_SIMPLE_STATUS,
-    NATIVE_CMD_AUTH_STATUS,
-    NATIVE_STATUS_ARMED_BYTE,
-    NATIVE_STATUS_DISARMED,
-    NATIVE_STATUS_ARMED,
-    NATIVE_CMD_ARM_DISARM,
-    NATIVE_ARM_DISARM_SUBTYPE,
-    NATIVE_ARM_DISARM_CMD,
-    NATIVE_ARM_DISARM_DATA,
-    NATIVE_CMD_PGM,
-    NATIVE_PGM_SUBTYPE,
-    NATIVE_PGM_CMD,
-    NATIVE_PGM1_DATA,
-    NATIVE_PGM2_DATA,
-    NATIVE_PGM3_DATA,
-    NATIVE_PGM4_DATA,
-    NATIVE_PGM_STATE_BYTE,
-    NATIVE_PGM_ON_VALUES,
-    NATIVE_PGM_OFF_VALUES,
-    NATIVE_LOGOUT_REQUEST,
-    NATIVE_LOGOUT_SUBTYPE,
-    NATIVE_LOGOUT_CMD,
-    NATIVE_LOGOUT_DATA,
-)
+try:
+    from .const import (
+        CONF_PANEL_IP,
+        CONF_PASSWORD,
+        CONF_PORT,
+        DEFAULT_PORT,
+        DEFAULT_TIMEOUT,
+        # Native protocol constants
+        NATIVE_PROTOCOL_ID,
+        NATIVE_AUTH_REQUEST,
+        NATIVE_AUTH_SUBTYPE,
+        NATIVE_AUTH_CMD,
+        NATIVE_AUTH_CONSTANTS,
+        NATIVE_STATUS_REQUEST,
+        NATIVE_SUBTYPE_STATUS,
+        NATIVE_CMD_SIMPLE_STATUS,
+        NATIVE_CMD_AUTH_STATUS,
+        NATIVE_STATUS_ARMED_BYTE,
+        NATIVE_STATUS_DISARMED,
+        NATIVE_STATUS_ARMED,
+        NATIVE_CMD_ARM_DISARM,
+        NATIVE_ARM_DISARM_SUBTYPE,
+        NATIVE_ARM_DISARM_CMD,
+        NATIVE_ARM_DISARM_DATA,
+        NATIVE_CMD_PGM,
+        NATIVE_PGM_SUBTYPE,
+        NATIVE_PGM_CMD,
+        NATIVE_PGM1_DATA,
+        NATIVE_PGM2_DATA,
+        NATIVE_PGM3_DATA,
+        NATIVE_PGM4_DATA,
+        NATIVE_PGM_STATE_BYTE,
+        NATIVE_PGM_ON_VALUES,
+        NATIVE_PGM_OFF_VALUES,
+        NATIVE_LOGOUT_REQUEST,
+        NATIVE_LOGOUT_SUBTYPE,
+        NATIVE_LOGOUT_CMD,
+        NATIVE_LOGOUT_DATA,
+    )
+except ImportError:
+    from const import (
+        CONF_PANEL_IP,
+        CONF_PASSWORD,
+        CONF_PORT,
+        DEFAULT_PORT,
+        DEFAULT_TIMEOUT,
+        # Native protocol constants
+        NATIVE_PROTOCOL_ID,
+        NATIVE_AUTH_REQUEST,
+        NATIVE_AUTH_SUBTYPE,
+        NATIVE_AUTH_CMD,
+        NATIVE_AUTH_CONSTANTS,
+        NATIVE_STATUS_REQUEST,
+        NATIVE_SUBTYPE_STATUS,
+        NATIVE_CMD_SIMPLE_STATUS,
+        NATIVE_CMD_AUTH_STATUS,
+        NATIVE_STATUS_ARMED_BYTE,
+        NATIVE_STATUS_DISARMED,
+        NATIVE_STATUS_ARMED,
+        NATIVE_CMD_ARM_DISARM,
+        NATIVE_ARM_DISARM_SUBTYPE,
+        NATIVE_ARM_DISARM_CMD,
+        NATIVE_ARM_DISARM_DATA,
+        NATIVE_CMD_PGM,
+        NATIVE_PGM_SUBTYPE,
+        NATIVE_PGM_CMD,
+        NATIVE_PGM1_DATA,
+        NATIVE_PGM2_DATA,
+        NATIVE_PGM3_DATA,
+        NATIVE_PGM4_DATA,
+        NATIVE_PGM_STATE_BYTE,
+        NATIVE_PGM_ON_VALUES,
+        NATIVE_PGM_OFF_VALUES,
+        NATIVE_LOGOUT_REQUEST,
+        NATIVE_LOGOUT_SUBTYPE,
+        NATIVE_LOGOUT_CMD,
+        NATIVE_LOGOUT_DATA,
+    )
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -376,155 +416,189 @@ class IntelbrasNativeProtocol:
 
 
 class IntelbrasConnector:
-    """Connector for Intelbras alarm panels using native 0xe7 protocol."""
+    """Connector for Intelbras alarm panels using native 0xe7 protocol.
+
+    Uses a persistent TCP connection with TCP keepalive for stale connection
+    detection. Automatically reconnects when the connection drops.
+    """
 
     def __init__(self, config: dict[str, Any]) -> None:
         """Initialize the connector."""
         self.config = config
         self.reader: asyncio.StreamReader | None = None
         self.writer: asyncio.StreamWriter | None = None
-        self.is_connected = False
-        self.is_authenticated = False
+        self._is_connected = False
+        self._is_authenticated = False
         self.last_status: dict[str, Any] = {}
 
         # Concurrency control and error tracking
         self._connection_lock = asyncio.Lock()
         self._last_connection_error: str | None = None
         self._edit_mode_detected: bool = False
+        self._consecutive_failures: int = 0
 
         # PGM state persistence - maintain states between status updates (only 2 PGMs)
         self._pgm_states = {1: False, 2: False}  # Only PGM 1-2 as per Android app
 
-    async def async_connect(self) -> bool:
-        """Connect to the panel and establish session."""
-        if self.is_connected:
+    def _is_connection_alive(self) -> bool:
+        """Check if the persistent connection is still usable."""
+        if not self._is_connected or not self._is_authenticated:
+            return False
+        if not self.writer or self.writer.is_closing():
+            return False
+        # Check if the underlying socket is still open
+        try:
+            sock = self.writer.get_extra_info("socket")
+            if sock is None:
+                return False
+            # Non-blocking check: if recv returns 0 bytes, peer closed
+            sock.setblocking(False)
+            try:
+                data = sock.recv(1, socket.MSG_PEEK)
+                if data == b"":
+                    return False  # Peer closed
+            except BlockingIOError:
+                pass  # No data available — socket is still alive
+            except (OSError, ConnectionError):
+                return False
+            finally:
+                sock.setblocking(True)
+        except Exception:
+            return False
+        return True
+
+    async def _ensure_connected(self) -> bool:
+        """Ensure we have a live, authenticated connection. Reconnect if needed."""
+        if self._is_connection_alive():
             return True
 
-        try:
-            return await self._connect_local()
-        except Exception as ex:
-            _LOGGER.error("Connection failed: %s", ex)
-            self._last_connection_error = str(ex)
-            return False
+        _LOGGER.info("Connection not alive, reconnecting...")
+        await self._cleanup_connection()
 
-    async def _connect_local(self) -> bool:
-        """Connect to panel via local network."""
         ip = self.config[CONF_PANEL_IP]
         port = self.config.get(CONF_PORT, DEFAULT_PORT)
+        password = self.config.get(CONF_PASSWORD, "")
+
+        if not password:
+            self._last_connection_error = "No password configured"
+            return False
 
         try:
+            # 1. Open TCP connection
             self.reader, self.writer = await asyncio.wait_for(
-                asyncio.open_connection(ip, port), timeout=DEFAULT_TIMEOUT
+                asyncio.open_connection(ip, port), timeout=10
             )
 
-            # Test connection with initial status
+            # 2. Enable TCP keepalive on the underlying socket
+            sock = self.writer.get_extra_info("socket")
+            if sock:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                # Send keepalive probe after 30s idle, every 10s, fail after 3 missed
+                if hasattr(socket, "TCP_KEEPIDLE"):
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 30)
+                if hasattr(socket, "TCP_KEEPINTVL"):
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 10)
+                if hasattr(socket, "TCP_KEEPCNT"):
+                    sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+
+            # 3. Send initial status handshake
             packet = IntelbrasNativeProtocol.build_initial_status()
             self.writer.write(packet)
             await self.writer.drain()
 
-            response = await asyncio.wait_for(self.reader.read(1024), timeout=5)
+            response = await asyncio.wait_for(self.reader.read(1024), timeout=8)
+            if not response or len(response) < 7:
+                raise ConnectionError("Initial status handshake failed")
 
-            if response and len(response) >= 7:
-                self.is_connected = True
-                return True
-            else:
-                _LOGGER.warning("Initial status failed - invalid response")
-            await self._cleanup_connection()
-            return False
+            self._is_connected = True
 
-        except Exception as ex:
-            _LOGGER.error("Failed to connect: %s", ex)
-            self._last_connection_error = str(ex)
-            await self._cleanup_connection()
-            return False
+            # 4. Authenticate
+            await asyncio.sleep(0.5)  # Panel stability delay
 
-    async def async_authenticate(self) -> bool:
-        """Authenticate with the panel."""
-        if not self.is_connected:
-            if not await self.async_connect():
-                return False
+            auth_packet = IntelbrasNativeProtocol.build_authentication(password)
+            self.writer.write(auth_packet)
+            await self.writer.drain()
 
-        if self.is_authenticated:
+            auth_response = await asyncio.wait_for(self.reader.read(1024), timeout=8)
+            if not auth_response or len(auth_response) < 5:
+                raise ConnectionError("Authentication failed - invalid response")
+
+            await asyncio.sleep(0.3)  # Post-auth stability delay
+
+            self._is_authenticated = True
+            self._last_connection_error = None
+            self._edit_mode_detected = False
+            self._consecutive_failures = 0
+            _LOGGER.info("Connected and authenticated to panel at %s:%s", ip, port)
             return True
 
-        async with self._connection_lock:
-            try:
-                password = self.config.get(CONF_PASSWORD, "")
-                if not password:
-                    _LOGGER.error("No password configured for authentication")
-                    return False
+        except Exception as ex:
+            self._last_connection_error = str(ex)
+            if "timeout" in str(ex).lower():
+                self._edit_mode_detected = True
+            _LOGGER.error("Failed to connect: %s", ex)
+            await self._cleanup_connection()
+            return False
 
-                await asyncio.sleep(0.5)  # Panel stability delay
+    async def _send_and_receive(self, packet: bytes, timeout: float = 10) -> bytes | None:
+        """Send a packet and read the response on the persistent connection.
 
-                packet = IntelbrasNativeProtocol.build_authentication(password)
-                self.writer.write(packet)
-                await self.writer.drain()
+        If the send/receive fails, marks the connection as dead so the next
+        call to _ensure_connected will reconnect.
+        """
+        try:
+            if not self.writer or self.writer.is_closing():
+                raise ConnectionError("Writer is closed")
 
-                response = await asyncio.wait_for(self.reader.read(1024), timeout=10)
+            self.writer.write(packet)
+            await self.writer.drain()
 
-                if response and len(response) >= 5:
-                    self.is_authenticated = True
-                    await asyncio.sleep(0.3)  # Post-auth delay
-                    return True
-                else:
-                    _LOGGER.error("Authentication failed - invalid response")
-                    return False
+            response = await asyncio.wait_for(self.reader.read(1024), timeout=timeout)
+            if not response:
+                raise ConnectionError("Empty response")
 
-            except Exception as ex:
-                _LOGGER.error("Authentication error: %s", ex)
-                return False
+            self._consecutive_failures = 0
+            return response
+
+        except Exception as ex:
+            _LOGGER.warning("Send/receive failed, will reconnect: %s", ex)
+            self._consecutive_failures += 1
+            await self._cleanup_connection()
+            raise
 
     async def async_get_status(self) -> dict[str, Any]:
         """Get current panel status."""
-        if not self.is_connected:
-            if not await self.async_connect():
-                return self._get_disconnected_status("Connection failed")
-
-        if not self.is_authenticated:
-            if not await self.async_authenticate():
-                return self._get_disconnected_status("Authentication failed")
-
         async with self._connection_lock:
             try:
-                if not self.writer or self.writer.is_closing():
-                    await self._cleanup_connection()
-                    if not await self.async_connect() or not await self.async_authenticate():
-                        return self._get_disconnected_status("Reconnection failed")
+                if not await self._ensure_connected():
+                    return self._get_disconnected_status("Connection failed")
 
                 packet = IntelbrasNativeProtocol.build_authenticated_status()
-                self.writer.write(packet)
-                await self.writer.drain()
+                response = await self._send_and_receive(packet, timeout=10)
 
-                response = await asyncio.wait_for(self.reader.read(1024), timeout=DEFAULT_TIMEOUT)
+                parsed = IntelbrasNativeProtocol.parse_status_response(response)
 
-                if response:
-                    parsed = IntelbrasNativeProtocol.parse_status_response(response)
+                status = {
+                    "connected": True,
+                    "authenticated": parsed.get("authenticated", False),
+                    "armed": parsed.get("armed", False),
+                    "partial_armed": False,
+                    "alarm": False,
+                    "pgms": self._build_pgm_status(),
+                    "events": [],
+                    "firmware_version": parsed.get("firmware_version"),
+                    "source_voltage": parsed.get("source_voltage"),
+                    "battery_voltage": parsed.get("battery_voltage"),
+                    "siren_status": parsed.get("siren_status"),
+                    "battery_missing": parsed.get("battery_missing"),
+                    "native_response": parsed,
+                }
 
-                    status = {
-                        "connected": True,
-                        "authenticated": parsed.get("authenticated", False),
-                        "armed": parsed.get("armed", False),
-                        "partial_armed": False,
-                        "alarm": False,
-                        "pgms": self._build_pgm_status(),
-                        "events": [],
-                        "firmware_version": parsed.get("firmware_version"),
-                        "source_voltage": parsed.get("source_voltage"),
-                        "battery_voltage": parsed.get("battery_voltage"),
-                        "siren_status": parsed.get("siren_status"),
-                        "battery_missing": parsed.get("battery_missing"),
-                        "native_response": parsed,
-                    }
-
-                    self.last_status = status
-                    return status
-                else:
-                    await self._handle_connection_error(Exception("Empty response"))
-                    return self._get_disconnected_status("Empty response from panel")
+                self.last_status = status
+                return status
 
             except Exception as ex:
                 _LOGGER.error("Failed to get status: %s", ex)
-                await self._handle_connection_error(ex)
                 return self._get_disconnected_status(f"Communication error: {ex}")
 
     def _build_pgm_status(self) -> list[dict[str, Any]]:
@@ -538,7 +612,6 @@ class IntelbrasConnector:
         """Return disconnected status while preserving last known alarm state."""
         _LOGGER.warning("Panel disconnected: %s", reason)
 
-        # Preserve last known alarm states when available
         previous = self.last_status or {}
 
         status = {
@@ -547,7 +620,7 @@ class IntelbrasConnector:
             "armed": previous.get("armed", None),
             "partial_armed": previous.get("partial_armed", None),
             "alarm": previous.get("alarm", None),
-            "pgms": self._build_pgm_status(),  # Use same 2-PGM logic
+            "pgms": self._build_pgm_status(),
             "events": previous.get("events", []),
             "connection_error": reason,
         }
@@ -579,22 +652,13 @@ class IntelbrasConnector:
 
     async def _send_arm_disarm_toggle(self, action: str) -> bool:
         """Send arm/disarm toggle command."""
-        if not self.is_authenticated:
-            if not await self.async_authenticate():
-                return False
-
         async with self._connection_lock:
             try:
-                if not self.writer or self.writer.is_closing():
-                    await self._cleanup_connection()
-                    if not await self.async_connect() or not await self.async_authenticate():
-                        return False
+                if not await self._ensure_connected():
+                    return False
 
                 packet = IntelbrasNativeProtocol.build_arm_disarm_toggle()
-                self.writer.write(packet)
-                await self.writer.drain()
-
-                response = await asyncio.wait_for(self.reader.read(1024), timeout=DEFAULT_TIMEOUT)
+                response = await self._send_and_receive(packet, timeout=DEFAULT_TIMEOUT)
 
                 if response:
                     parsed = IntelbrasNativeProtocol.parse_control_response(response, "arm_disarm")
@@ -603,34 +667,23 @@ class IntelbrasConnector:
 
             except Exception as ex:
                 _LOGGER.error("Failed to %s: %s", action, ex)
-                await self._handle_connection_error(ex)
                 return False
 
     async def async_set_pgm(self, pgm_id: int, state: bool) -> bool:
         """Toggle PGM output."""
-        if not self.is_authenticated:
-            if not await self.async_authenticate():
-                return False
-
         async with self._connection_lock:
             try:
-                if not self.writer or self.writer.is_closing():
-                    await self._cleanup_connection()
-                    if not await self.async_connect() or not await self.async_authenticate():
-                        return False
+                if not await self._ensure_connected():
+                    return False
 
                 packet = IntelbrasNativeProtocol.build_pgm_toggle(pgm_id)
-                self.writer.write(packet)
-                await self.writer.drain()
-
-                response = await asyncio.wait_for(self.reader.read(1024), timeout=DEFAULT_TIMEOUT)
+                response = await self._send_and_receive(packet, timeout=DEFAULT_TIMEOUT)
 
                 if response:
                     parsed = IntelbrasNativeProtocol.parse_control_response(response, "pgm")
                     success = parsed["success"]
 
-                    # Update persistent state on successful toggle
-                    if success and 1 <= pgm_id <= 2:  # Only PGM 1-2 supported
+                    if success and 1 <= pgm_id <= 2:
                         self._pgm_states[pgm_id] = not self._pgm_states.get(pgm_id, False)
 
                     return success
@@ -638,7 +691,6 @@ class IntelbrasConnector:
 
             except Exception as ex:
                 _LOGGER.error("Failed to toggle PGM %s: %s", pgm_id, ex)
-                await self._handle_connection_error(ex)
                 return False
 
     async def async_trigger_pgm(self, pgm_id: int, action: str = "toggle") -> bool:
@@ -650,24 +702,19 @@ class IntelbrasConnector:
         _LOGGER.debug("Starting PGM discovery...")
 
         try:
-            # Get current status to see what PGMs are available (don't use lock here)
-            _LOGGER.debug("Getting panel status for PGM discovery...")
             status = await self.async_get_status()
 
             if "pgms" in status:
                 pgms = status["pgms"]
                 _LOGGER.info("PGM discovery found %d PGMs: %s", len(pgms), [f"PGM {pgm['id']}" for pgm in pgms])
 
-                # Test each PGM to see if it responds by trying a simple status check
                 active_pgms = []
                 for pgm in pgms:
                     pgm_id = pgm["id"]
                     try:
-                        # Simply check if PGM ID is valid and get its status
                         pgm_status = self.get_pgm_status(pgm_id)
-                        if pgm_status and 1 <= pgm_id <= 2:  # Only PGM 1-2 supported
+                        if pgm_status and 1 <= pgm_id <= 2:
                             active_pgms.append(pgm_status)
-                            _LOGGER.debug("PGM %d is available: %s", pgm_id, pgm_status)
                     except Exception as ex:
                         _LOGGER.debug("PGM %d not available: %s", pgm_id, ex)
 
@@ -678,53 +725,16 @@ class IntelbrasConnector:
                     "status": status,
                 }
             else:
-                _LOGGER.warning("No PGM data found in status response")
                 return {"pgms": [], "error": "No PGM data in status"}
 
         except Exception as ex:
             _LOGGER.error("Failed to discover PGMs: %s", ex, exc_info=True)
             return {"pgms": [], "error": str(ex)}
 
-    async def async_logout(self) -> bool:
-        """Logout and close session."""
-        if not self.is_connected:
-            return True
-
-        async with self._connection_lock:
-            try:
-                packet = IntelbrasNativeProtocol.build_logout()
-                self.writer.write(packet)
-                await self.writer.drain()
-
-                try:
-                    await asyncio.wait_for(self.reader.read(1024), timeout=2)
-                except asyncio.TimeoutError:
-                    pass
-
-                return True
-
-            except Exception as ex:
-                _LOGGER.warning("Logout error (non-critical): %s", ex)
-                return True
-
-    async def _handle_connection_error(self, ex: Exception) -> None:
-        """Handle connection errors."""
-        self._last_connection_error = str(ex)
-
-        if "connection reset" in str(ex).lower():
-            _LOGGER.warning("Panel reset connection - normal behavior")
-        elif "timeout" in str(ex).lower():
-            self._edit_mode_detected = True
-            _LOGGER.warning("Connection timeout - panel may be in edit mode")
-        else:
-            _LOGGER.error("Connection error: %s", ex)
-
-        await self._cleanup_connection()
-
     async def _cleanup_connection(self) -> None:
         """Clean up connection and reset state."""
-        self.is_connected = False
-        self.is_authenticated = False
+        self._is_connected = False
+        self._is_authenticated = False
 
         if self.writer:
             try:
@@ -736,26 +746,19 @@ class IntelbrasConnector:
             finally:
                 self.writer = None
 
-        if self.reader:
-            self.reader = None
+        self.reader = None
 
     async def async_disconnect(self) -> None:
-        """Disconnect from panel."""
-        if not self.is_connected:
-            return
-
-        try:
-            if self.is_authenticated and self.writer and not self.writer.is_closing():
+        """Disconnect from panel with best-effort logout."""
+        async with self._connection_lock:
+            if self._is_authenticated and self.writer and not self.writer.is_closing():
                 try:
                     logout_packet = IntelbrasNativeProtocol.build_logout()
                     self.writer.write(logout_packet)
                     await self.writer.drain()
                     await asyncio.sleep(0.2)
-                except Exception as ex:
-                    _LOGGER.warning("Logout failed (non-critical): %s", ex)
-        except Exception as ex:
-            _LOGGER.warning("Disconnect error: %s", ex)
-        finally:
+                except Exception:
+                    pass
             await self._cleanup_connection()
 
     # Error tracking and compatibility methods
@@ -766,10 +769,11 @@ class IntelbrasConnector:
     def get_connection_info(self) -> dict[str, Any]:
         """Get connection information for debugging."""
         return {
-            "is_connected": self.is_connected,
-            "is_authenticated": self.is_authenticated,
+            "is_connected": self._is_connected,
+            "is_authenticated": self._is_authenticated,
             "last_error": self._last_connection_error,
             "edit_mode_detected": self._edit_mode_detected,
+            "consecutive_failures": self._consecutive_failures,
             "panel_ip": self.config.get(CONF_PANEL_IP, "Unknown"),
             "panel_port": self.config.get(CONF_PORT, DEFAULT_PORT),
         }

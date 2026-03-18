@@ -134,43 +134,33 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_create_entry(title=title, data=user_input)
 
     async def _test_connection(self, config: dict[str, Any]) -> None:
-        """Test if we can connect to the panel with improved error handling."""
+        """Test if we can connect to the panel using a single status poll."""
         connector = IntelbrasConnector(config)
         try:
-            # Test basic connection first
             _LOGGER.debug(
-                "Testing basic connection to %s:%s", config[CONF_PANEL_IP], config.get(CONF_PORT, DEFAULT_PORT)
+                "Testing connection to %s:%s", config[CONF_PANEL_IP], config.get(CONF_PORT, DEFAULT_PORT)
             )
 
-            success = await connector.async_connect()
-            if not success:
-                error_msg = connector.get_last_connection_error()
-                _LOGGER.error("Connection failed: %s", error_msg)
+            status = await connector.async_get_status()
+
+            if not status.get("connected", False):
+                error_msg = status.get("connection_error", "Unknown error")
+                if "authentication" in error_msg.lower():
+                    raise InvalidAuth(f"Authentication failed - verify Remote Password: {error_msg}")
                 raise CannotConnect(f"Connection failed: {error_msg}")
 
-            _LOGGER.debug("Basic connection successful, testing authentication")
-
-            # Test authentication with proper sequence
-            auth_success = await connector.async_authenticate()
-            if not auth_success:
-                _LOGGER.error("Authentication failed - check Remote Password")
+            if not status.get("authenticated", False):
                 raise InvalidAuth("Authentication failed - verify Remote Password in panel settings")
 
-            _LOGGER.debug("Authentication successful")
+            _LOGGER.debug("Connection test successful")
 
         except CannotConnect:
-            raise  # Re-raise connection errors as-is
+            raise
         except InvalidAuth:
-            raise  # Re-raise auth errors as-is
+            raise
         except Exception as ex:
             _LOGGER.error("Unexpected error during connection test: %s", ex)
             raise CannotConnect(f"Unexpected error: {ex}")
-        finally:
-            # Always clean up the connection
-            try:
-                await connector.async_disconnect()
-            except Exception as ex:
-                _LOGGER.warning("Error during disconnect: %s", ex)
 
 
 class CannotConnect(HomeAssistantError):

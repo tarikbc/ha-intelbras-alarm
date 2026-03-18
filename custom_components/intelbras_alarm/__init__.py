@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from homeassistant.config_entries import ConfigEntry
@@ -26,7 +27,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator = IntelbrasAlarmCoordinator(hass, entry)
 
     try:
-        await coordinator.async_config_entry_first_refresh()
+        # Use a shorter timeout for initial refresh to avoid cancellation issues
+        await asyncio.wait_for(
+            coordinator.async_config_entry_first_refresh(),
+            timeout=30  # 30 second timeout for initial setup
+        )
+    except asyncio.TimeoutError:
+        _LOGGER.warning("Initial connection timeout - integration will continue loading and retry automatically")
+        # Don't return False - let the integration start with a timeout, it will retry
+    except asyncio.CancelledError:
+        _LOGGER.warning("Setup was cancelled - integration will retry connection automatically")
+        # Don't return False - let the integration start even if cancelled
     except Exception as ex:
         _LOGGER.error("Failed to initialize Intelbras Alarm: %s", ex)
         return False

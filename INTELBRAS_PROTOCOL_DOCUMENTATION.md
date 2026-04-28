@@ -252,14 +252,61 @@ Response: Contains MAC address at bytes 4-9
 
 The 32-byte authenticated status response contains rich information:
 
-| Byte Range | Information      | Format                                       |
-| ---------- | ---------------- | -------------------------------------------- |
-| 6          | Armed State      | `0x00` = Disarmed, `0x03` = Armed            |
-| 20-21      | Source Voltage   | 16-bit value, formula: `(raw + 500) / 100.0` |
-| 22-23      | Battery Voltage  | 16-bit value, formula: `(raw + 500) / 100.0` |
-| 26-27      | Firmware Version | `major = byte1-16, minor = byte2-1`          |
-| 28         | Siren Status     | Pattern-based detection                      |
-| 29         | Battery Status   | Additional battery confirmation              |
+| Byte Range | Information         | Format                                                                   |
+| ---------- | ------------------- | ------------------------------------------------------------------------ |
+| 6          | Armed State         | `0x00` = Disarmed, `0x03` = Armed (away)                                 |
+| 8          | Alarm Memory Latch  | `0x00` = clean, `0x02` = an alarm occurred since last memory clear       |
+| 19         | **Composite Status**| Bit field — see below                                                    |
+| 20-21      | Source Voltage      | 16-bit value, formula: `(raw + 500) / 100.0`                             |
+| 22-23      | Battery Voltage     | 16-bit value, formula: `(raw + 500) / 100.0`                             |
+| 26-27      | Firmware Version    | `major = byte1-16, minor = byte2-1`                                      |
+| 28         | Siren Status        | Pattern-based detection (NOT reliable — always reads `0x1a` in practice) |
+| 29         | Battery Status      | Additional battery confirmation                                          |
+
+#### Byte 19 — Composite Status Bits
+
+Reverse-engineered against an AMT 1016 NET on 2026-04-27 by capturing the
+32-byte status across (disarmed clean / armed clean / armed-and-triggered /
+disarmed-mid-siren / disarmed-with-memory-only / armed-with-memory-only) and
+diffing the bit pattern. Combined with byte 6 (arm state) and byte 8 (memory
+latch) this fully describes the live alarm state.
+
+| Bit  | Mask   | Meaning                                                          |
+| ---- | ------ | ---------------------------------------------------------------- |
+| 0    | `0x01` | Always 1 (status frame marker)                                   |
+| 1    | `0x02` | **Live siren active** — the only reliable mid-trigger signal     |
+| 3    | `0x08` | Currently armed (mirrors byte 6 == `0x03`)                       |
+| 4    | `0x10` | Always 1 (status frame marker)                                   |
+| 2,5,6,7 |     | Unknown — partial-arm / specific-zone-trigger likely live here   |
+
+Observed values (each captured from a real 32-byte response):
+
+| Panel state                                 | byte 6 | byte 8 | byte 19 |
+| ------------------------------------------- | ------ | ------ | ------- |
+| Disarmed clean                              | `0x00` | `0x00` | `0x11`  |
+| Armed away clean                            | `0x03` | `0x00` | `0x19`  |
+| Armed away + siren actively sounding        | `0x03` | `0x02` | `0x1b`  |
+| Disarmed mid-siren (siren stops within ~1s) | `0x00` | `0x02` | `0x13`  |
+| Disarmed, siren stopped, memory still set   | `0x00` | `0x02` | `0x11`  |
+| Armed away with memory still latched        | `0x03` | `0x02` | `0x19`  |
+
+#### Key Invariant — Why Byte 19 Bit 1 (Not Byte 8) for Live Alarm
+
+Byte 8 (`0x02` when an alarm has occurred) is a **latched memory bit**: it
+survives disarm, re-arm, and any number of arm/disarm cycles until cleared at
+the panel keypad. Using `byte8 == 0x02` as the live-siren signal causes false
+positives every time you re-arm after a previous trigger.
+
+Byte 19 bit 1 is the live edge: high while the siren is actively sounding,
+clears within one poll cycle of disarm. This is the correct field to drive
+`alarm_control_panel.state == TRIGGERED`.
+
+The implementation:
+
+```python
+result["alarm"] = bool(data[19] & 0x02)         # live siren
+result["alarm_memory"] = data[8] == 0x02        # latched "had an alarm"
+```
 
 ### PGM Limitations
 

@@ -134,17 +134,32 @@ class IntelbrasSystemStatusSensor(IntelbrasBaseSensor):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return the state attributes."""
+        """Return the state attributes.
+
+        Includes the raw protocol bytes that drive the parser, so users can
+        inspect them via the HA API while the alarm is in different states
+        (disarmed / armed / triggered) and identify the bit/byte that encodes
+        triggered. Once the triggered byte pattern is known, the parser can be
+        extended to set status['alarm'] correctly.
+        """
         if not self.coordinator.data or "status" not in self.coordinator.data:
             return {}
 
         status = self.coordinator.data["status"]
+        native = status.get("native_response", {}) or {}
 
         return {
             "armed": status.get("armed", False),
             "partial_armed": status.get("partial_armed", False),
             "alarm": status.get("alarm", False),
             "pgms_count": len(status.get("pgms", [])),
+            # Diagnostic — raw bytes from the protocol response. byte 6 = armed
+            # state byte, byte 28 = siren byte. Capture these in different
+            # alarm states (disarmed / armed / triggered) to map out the
+            # triggered/partial-armed bit pattern, then update the parser.
+            "armed_byte_value": native.get("armed_byte_value"),
+            "siren_byte_debug": native.get("siren_byte_debug"),
+            "raw_response": native.get("raw_response"),
         }
 
 

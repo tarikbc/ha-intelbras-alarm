@@ -216,6 +216,8 @@ class IntelbrasNativeProtocol:
         """
         result = {
             "armed": False,
+            "alarm": False,
+            "alarm_memory": False,
             "authenticated": False,  # Default to False to avoid KeyError on malformed/short responses
             "raw_response": data.hex(),
             "response_length": len(data),
@@ -233,6 +235,36 @@ class IntelbrasNativeProtocol:
                 result["armed"] = armed_byte == NATIVE_STATUS_ARMED
                 result["armed_byte_value"] = armed_byte
                 result["authenticated"] = True
+                # Byte 8 = alarm-memory latch (0x00 normally, 0x02 once an
+                # alarm has occurred). It survives disarm and re-arm, so it's
+                # NOT a live-siren signal — only useful for "an alarm happened
+                # recently" indicator.
+                # Byte 19 bit 1 (0x02) IS the live siren-active flag: it goes
+                # high while the siren is actually sounding and clears within
+                # a few seconds of disarm.
+                # Bit map of byte 19 observed on AMT 1016 NET (2026-04-27):
+                #   0x01 — always 1 (status frame marker?)
+                #   0x02 — siren currently active
+                #   0x08 — currently armed
+                #   0x10 — always 1 (status frame marker?)
+                #   other bits — unknown
+                alarm_memory_byte = data[8] if len(data) > 8 else 0
+                status_byte_19 = data[19] if len(data) > 19 else 0
+                result["alarm_memory_byte_value"] = alarm_memory_byte
+                result["status_byte_19"] = status_byte_19
+                result["alarm_memory"] = alarm_memory_byte == 0x02
+                result["alarm"] = bool(status_byte_19 & 0x02)
+
+                # Diagnostic INFO log — keep on while we collect more data
+                # (partial-arm states still unknown).
+                _LOGGER.info(
+                    "STATUS armed=0x%02x byte19=0x%02x mem=0x%02x siren=0x%02x raw=%s",
+                    armed_byte,
+                    status_byte_19,
+                    alarm_memory_byte,
+                    data[28] if len(data) > 28 else 0,
+                    data.hex(),
+                )
 
                 # Extract firmware version from bytes 26-27
                 if len(data) > 27:
@@ -583,7 +615,8 @@ class IntelbrasConnector:
                     "authenticated": parsed.get("authenticated", False),
                     "armed": parsed.get("armed", False),
                     "partial_armed": False,
-                    "alarm": False,
+                    "alarm": parsed.get("alarm", False),
+                    "alarm_memory": parsed.get("alarm_memory", False),
                     "pgms": self._build_pgm_status(),
                     "events": [],
                     "firmware_version": parsed.get("firmware_version"),

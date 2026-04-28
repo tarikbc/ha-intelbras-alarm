@@ -16,7 +16,8 @@ CONF_PORT: Final = "port"
 DEFAULT_PORT: Final = 9009
 DEFAULT_TIMEOUT: Final = 15
 DEFAULT_RETRIES: Final = 3
-DEFAULT_SCAN_INTERVAL: Final = 10  # seconds
+DEFAULT_SCAN_INTERVAL: Final = 5  # seconds — fast enough that brief siren
+                                  # windows aren't missed between polls
 
 # Connection types
 CONNECTION_TYPE_LOCAL: Final = "local"

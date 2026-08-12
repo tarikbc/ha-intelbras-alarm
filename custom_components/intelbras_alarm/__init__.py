@@ -29,8 +29,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         # Use a shorter timeout for initial refresh to avoid cancellation issues
         await asyncio.wait_for(
-            coordinator.async_config_entry_first_refresh(),
-            timeout=30  # 30 second timeout for initial setup
+            coordinator.async_config_entry_first_refresh(), timeout=30  # 30 second timeout for initial setup
         )
     except asyncio.TimeoutError:
         _LOGGER.warning("Initial connection timeout - integration will continue loading and retry automatically")

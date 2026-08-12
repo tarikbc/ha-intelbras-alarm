@@ -10,16 +10,20 @@ from typing import Any
 try:
     from .const import (
         CONF_PANEL_IP,
+        CONF_PANEL_MODEL,
         CONF_PASSWORD,
         CONF_PORT,
         DEFAULT_PORT,
         DEFAULT_TIMEOUT,
+        PANEL_MODEL_2018,
+        PANEL_MODEL_DEFAULT,
         # Native protocol constants
         NATIVE_PROTOCOL_ID,
         NATIVE_AUTH_REQUEST,
         NATIVE_AUTH_SUBTYPE,
         NATIVE_AUTH_CMD,
         NATIVE_AUTH_CONSTANTS,
+        NATIVE_AUTH_CONSTANTS_V2,
         NATIVE_STATUS_REQUEST,
         NATIVE_SUBTYPE_STATUS,
         NATIVE_CMD_SIMPLE_STATUS,
@@ -49,16 +53,20 @@ try:
 except ImportError:
     from const import (
         CONF_PANEL_IP,
+        CONF_PANEL_MODEL,
         CONF_PASSWORD,
         CONF_PORT,
         DEFAULT_PORT,
         DEFAULT_TIMEOUT,
+        PANEL_MODEL_2018,
+        PANEL_MODEL_DEFAULT,
         # Native protocol constants
         NATIVE_PROTOCOL_ID,
         NATIVE_AUTH_REQUEST,
         NATIVE_AUTH_SUBTYPE,
         NATIVE_AUTH_CMD,
         NATIVE_AUTH_CONSTANTS,
+        NATIVE_AUTH_CONSTANTS_V2,
         NATIVE_STATUS_REQUEST,
         NATIVE_SUBTYPE_STATUS,
         NATIVE_CMD_SIMPLE_STATUS,
@@ -105,14 +113,18 @@ class IntelbrasNativeProtocol:
         return checksum ^ 0xFF  # XOR with 0xFF to match packet capture
 
     @staticmethod
-    def encode_password(password_hex: str) -> list[int]:
-        """Encode password using discovered algorithm.
+    def encode_password(password_hex: str, panel_model: str = PANEL_MODEL_DEFAULT) -> list[int]:
+        """Encode password for the given panel model.
 
-        Algorithm: Convert hex password to bytes, add 10 to third byte, append constants.
+        AMT 1016 NET: add 10 to third byte, append [0x34, 0xED, 0xEF, 0x9F].
         Example: "123456" -> [0x12, 0x34, 0x56+10] + [0x34, 0xED, 0xEF, 0x9F]
+
+        AMT 2018 EG: raw password bytes, append [0x34, 0x69, 0x37].
+        Example: "123456" -> [0x12, 0x34, 0x56] + [0x34, 0x69, 0x37]
 
         Args:
             password_hex: Password as hex string (4-6 digits)
+            panel_model: Target panel model (determines encoding variant)
 
         Returns:
             Encoded password bytes for authentication
@@ -123,8 +135,13 @@ class IntelbrasNativeProtocol:
             for i in range(0, len(password_hex), 2):
                 password_bytes.append(int(password_hex[i : i + 2], 16))
 
-            # Apply encoding: add 10 to third byte, append constants
             encoded = password_bytes.copy()
+
+            if panel_model == PANEL_MODEL_2018:
+                encoded.extend(NATIVE_AUTH_CONSTANTS_V2)
+                return encoded
+
+            # AMT 1016 NET (default): add 10 to third byte, append constants
             if len(encoded) >= 3:
                 encoded[2] += 10
             encoded.extend(NATIVE_AUTH_CONSTANTS)
@@ -142,9 +159,9 @@ class IntelbrasNativeProtocol:
         return IntelbrasNativeProtocol._build_packet(data)
 
     @staticmethod
-    def build_authentication(password_hex: str) -> bytes:
-        """Build authentication request using discovered algorithm."""
-        encoded_password = IntelbrasNativeProtocol.encode_password(password_hex)
+    def build_authentication(password_hex: str, panel_model: str = PANEL_MODEL_DEFAULT) -> bytes:
+        """Build authentication request for the given panel model."""
+        encoded_password = IntelbrasNativeProtocol.encode_password(password_hex, panel_model)
 
         data = [
             NATIVE_PROTOCOL_ID,
@@ -227,12 +244,21 @@ class IntelbrasNativeProtocol:
             "battery_missing": None,
         }
 
+        # Some panels (AMT 2018 EG) send zero-filler bytes before the real frame;
+        # strip them so field offsets line up with the frame start. No real frame
+        # starts with 0x00 because byte 0 is the data length.
+        data = data.lstrip(b"\x00")
+        result["response_length"] = len(data)
+
         if len(data) >= 7:
-            # Check if this is an authenticated status response (32+ bytes)
-            if len(data) >= 32:
-                # Extract armed state from byte 6 (0-based indexing)
+            # Check if this is an authenticated status response.
+            # Full frame is 34 bytes on AMT 1016 NET (32 data bytes) and
+            # 32 bytes on AMT 2018 EG (30 data bytes, length=0x1E).
+            if len(data) >= 30:
+                # Extract armed state from byte 6 (0-based indexing).
+                # Partition bitmask: 0x03 on AMT 1016 NET, 0x01 on AMT 2018 EG.
                 armed_byte = data[NATIVE_STATUS_ARMED_BYTE]
-                result["armed"] = armed_byte == NATIVE_STATUS_ARMED
+                result["armed"] = armed_byte != NATIVE_STATUS_DISARMED
                 result["armed_byte_value"] = armed_byte
                 result["authenticated"] = True
                 # Byte 8 = alarm-memory latch (0x00 normally, 0x02 once an
@@ -499,6 +525,26 @@ class IntelbrasConnector:
             return False
         return True
 
+    async def _read_frame(self, timeout: float) -> bytes:
+        """Read a response frame, skipping zero-filler segments.
+
+        Some panels (AMT 2018 EG) send a short all-zero segment before the real
+        response frame. Keep reading until non-zero bytes arrive, and strip any
+        leading zeros so the frame starts at its length byte.
+        """
+        loop = asyncio.get_event_loop()
+        deadline = loop.time() + timeout
+        while True:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                raise asyncio.TimeoutError("Timeout waiting for response frame")
+            chunk = await asyncio.wait_for(self.reader.read(1024), timeout=remaining)
+            if not chunk:
+                raise ConnectionError("Empty response")
+            frame = chunk.lstrip(b"\x00")
+            if frame:
+                return frame
+
     async def _ensure_connected(self) -> bool:
         """Ensure we have a live, authenticated connection. Reconnect if needed."""
         if self._is_connection_alive():
@@ -517,9 +563,7 @@ class IntelbrasConnector:
 
         try:
             # 1. Open TCP connection
-            self.reader, self.writer = await asyncio.wait_for(
-                asyncio.open_connection(ip, port), timeout=10
-            )
+            self.reader, self.writer = await asyncio.wait_for(asyncio.open_connection(ip, port), timeout=10)
 
             # 2. Enable TCP keepalive on the underlying socket
             sock = self.writer.get_extra_info("socket")
@@ -538,20 +582,21 @@ class IntelbrasConnector:
             self.writer.write(packet)
             await self.writer.drain()
 
-            response = await asyncio.wait_for(self.reader.read(1024), timeout=8)
+            response = await self._read_frame(timeout=8)
             if not response or len(response) < 7:
                 raise ConnectionError("Initial status handshake failed")
 
             self._is_connected = True
 
-            # 4. Authenticate
+            # 4. Authenticate (encoding depends on panel model)
             await asyncio.sleep(0.5)  # Panel stability delay
 
-            auth_packet = IntelbrasNativeProtocol.build_authentication(password)
+            panel_model = self.config.get(CONF_PANEL_MODEL, PANEL_MODEL_DEFAULT)
+            auth_packet = IntelbrasNativeProtocol.build_authentication(password, panel_model)
             self.writer.write(auth_packet)
             await self.writer.drain()
 
-            auth_response = await asyncio.wait_for(self.reader.read(1024), timeout=8)
+            auth_response = await self._read_frame(timeout=8)
             if not auth_response or len(auth_response) < 5:
                 raise ConnectionError("Authentication failed - invalid response")
 
@@ -585,9 +630,7 @@ class IntelbrasConnector:
             self.writer.write(packet)
             await self.writer.drain()
 
-            response = await asyncio.wait_for(self.reader.read(1024), timeout=timeout)
-            if not response:
-                raise ConnectionError("Empty response")
+            response = await self._read_frame(timeout=timeout)
 
             self._consecutive_failures = 0
             return response

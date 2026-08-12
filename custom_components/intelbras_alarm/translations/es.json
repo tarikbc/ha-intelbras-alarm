@@ -7,7 +7,8 @@
         "data": {
           "panel_ip": "Dirección IP del Panel (ej: 192.168.1.100)",
           "password": "Contraseña Remota (4-6 dígitos)",
-          "port": "Puerto de Comunicación"
+          "port": "Puerto de Comunicación",
+          "panel_model": "Modelo del Panel (determina la codificación de autenticación)"
         }
       }
     },

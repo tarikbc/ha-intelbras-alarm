@@ -115,6 +115,27 @@ def encode_password(password_hex: str) -> list[int]:
     return encoded
 ```
 
+### 3b. Password Encoding — AMT 2018 EG variant
+
+The AMT 2018 EG (firmware 8.5) uses a different, simpler encoding, confirmed by
+packet capture (issue #1, thanks @marlonanjos):
+
+1. Convert hex password to bytes, **unmodified** (no +10 on the third byte)
+2. Append constants `[0x34, 0x69, 0x37]` (3 bytes instead of 4)
+
+```
+Example, password "123456":
+Request: 09 e7 05 11 12 34 56 34 69 37 1f
+```
+
+Note the auth packet is 11 bytes total instead of 12. Sending the 1016-style
+12-byte packet to an AMT 2018 EG makes the panel enter a protection mode and
+stop responding until rebooted. The integration selects the encoding from the
+"Panel Model" chosen during setup.
+
+The AMT 2018 EG also sends a short all-zero filler segment before each real
+response frame; parsers must skip leading `0x00` bytes.
+
 ## Status Monitoring
 
 ### Simple Status (Unauthenticated)
@@ -137,10 +158,14 @@ Response: 20 bytes of detailed status
 
 - **Purpose**: Complete panel status including armed state
 - **Authentication**: Required
-- **Armed State Detection**: Byte 6 (0-based) indicates armed status:
+- **Frame size**: AMT 1016 NET responds with 32 data bytes (34-byte frame,
+  header `e7 01 90`); AMT 2018 EG responds with 30 data bytes (32-byte frame,
+  length `0x1E`, header `e7 1a 97`). Field offsets are identical in both.
+- **Armed State Detection**: Byte 6 (0-based) is a partition bitmask:
   - `0x00`: Disarmed
-  - `0x03`: Armed (confirmed through testing)
-  - Other values: Partial arm states (zone-specific)
+  - `0x03`: Armed on AMT 1016 NET (both partitions, confirmed through testing)
+  - `0x01`: Armed on AMT 2018 EG (partition A, confirmed via packet capture)
+  - Any nonzero value should be treated as armed
 
 ## Control Commands
 

@@ -26,7 +26,7 @@ A custom Home Assistant integration for Intelbras AMT alarm systems using the na
 
 ### Prerequisites
 
-- **Supported Models**: AMT 1016 NET, AMT 2018 NET, and other AMT series panels
+- **Supported Models**: AMT 1016 NET, AMT 2018 NET, AMT 2018 EG (select the panel model during setup — it determines the authentication encoding)
 - **Network Access**: Your alarm panel must be connected to your local network
 - **Hex Password**: You'll need your panel's password (4-6 digits, e.g., "1234", "878787")
 

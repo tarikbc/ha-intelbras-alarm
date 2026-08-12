@@ -17,8 +17,11 @@ import homeassistant.helpers.config_validation as cv
 
 from .const import (
     CONF_PANEL_IP,
+    CONF_PANEL_MODEL,
     DEFAULT_PORT,
     DOMAIN,
+    PANEL_MODEL_DEFAULT,
+    PANEL_MODEL_OPTIONS,
 )
 from .protocol import IntelbrasConnector
 
@@ -38,11 +41,14 @@ def validate_and_clean_password(password: str) -> str:
 
 
 # Use proper voluptuous validators that can be serialized
+# Panel model is asked up front because the connection test must authenticate
+# with the model's password encoding (a wrong encoding can lock up the panel).
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_PANEL_IP): cv.string,
         vol.Required(CONF_PASSWORD): cv.string,
         vol.Required(CONF_PORT, default=DEFAULT_PORT): cv.port,
+        vol.Required(CONF_PANEL_MODEL, default=PANEL_MODEL_DEFAULT): vol.In(PANEL_MODEL_OPTIONS),
     }
 )
 
@@ -137,9 +143,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Test if we can connect to the panel using a single status poll."""
         connector = IntelbrasConnector(config)
         try:
-            _LOGGER.debug(
-                "Testing connection to %s:%s", config[CONF_PANEL_IP], config.get(CONF_PORT, DEFAULT_PORT)
-            )
+            _LOGGER.debug("Testing connection to %s:%s", config[CONF_PANEL_IP], config.get(CONF_PORT, DEFAULT_PORT))
 
             status = await connector.async_get_status()
 

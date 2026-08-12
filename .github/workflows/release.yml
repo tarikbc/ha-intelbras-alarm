@@ -1,0 +1,24 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  attach-zip:
+    runs-on: "ubuntu-latest"
+    name: Attach HACS zip
+    steps:
+      - uses: "actions/checkout@v4"
+      - name: Build zip
+        run: |
+          cd custom_components/intelbras_alarm
+          zip -r ../../intelbras_alarm.zip . -x '*__pycache__*' -x '*.pyc' -x '.DS_Store'
+      - name: Upload asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" intelbras_alarm.zip --clobber

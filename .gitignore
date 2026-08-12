@@ -92,6 +92,7 @@ tests/.env
 test_*.py
 *_test.py
 test_api_settings.py
+TEST_SCRIPTS_README.md
 
 # Development files
 scratch/

@@ -7,7 +7,8 @@
         "data": {
           "panel_ip": "Panel IP Address (e.g., 192.168.1.100)",
           "password": "Remote Password (4-6 digits)",
-          "port": "Communication Port"
+          "port": "Communication Port",
+          "panel_model": "Panel Model (determines the authentication encoding)"
         }
       }
     },
